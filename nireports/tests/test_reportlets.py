@@ -173,6 +173,52 @@ def test_fmriplot(input_files, testdata_path, outdir):
             bbox_inches="tight",
         )
 
+def test_fmriplot_withphysio(input_files, testdata_path, outdir):
+    """Exercise the fMRIPlot class when physio data is present."""
+    rng = np.random.default_rng(2010)
+
+    in_file = os.path.join(testdata_path, input_files[0])
+    seg_file = os.path.join(testdata_path, input_files[1]) if input_files[1] is not None else None
+
+    dtype = "nifti" if input_files[0].endswith("volreg.nii.gz") else "cifti"
+    has_seg = "_parc" if seg_file else ""
+
+    timeseries, segments = (
+        _nifti_timeseries(in_file, seg_file) if dtype == "nifti" else _cifti_timeseries(in_file)
+    )
+
+    fig = fMRIPlot(
+        timeseries,
+        segments,
+        tr=_get_tr(nb.load(in_file)),
+        confounds=pd.DataFrame(
+            {
+                "outliers": rng.normal(0.2, 0.2, timeseries.shape[-1] - 1),
+                "DVARS": rng.normal(0.2, 0.2, timeseries.shape[-1] - 1),
+                "FD": rng.normal(0.2, 0.2, timeseries.shape[-1] - 1),
+            }
+        ),
+        physio=pd.DataFrame(
+            {
+                # Simulating data at a higher sampling rate than 1/TR
+                "Resp.": np.sin(np.linspace(0,4*np.pi,4*timeseries.shape[-1] - 1)),
+            }
+        ),
+        physio_confounds=pd.DataFrame(
+            {
+                "RV": rng.normal(0.2, 0.2, timeseries.shape[-1] - 1),
+                "HR": rng.normal(0.2, 0.2, timeseries.shape[-1] - 1),
+            }
+        ),
+        units={"FD": "mm","HR": "bpm"},
+        paired_carpet=dtype == "cifti",
+    ).plot()
+    if outdir is not None:
+        fig.savefig(
+            outdir / f"fmriplot_{dtype}{has_seg}.svg",
+            bbox_inches="tight",
+        )
+
 
 def test_plot_melodic_components(tmp_path, outdir):
     """Test plotting melodic components"""

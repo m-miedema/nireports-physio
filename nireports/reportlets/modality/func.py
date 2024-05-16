@@ -40,6 +40,8 @@ class fMRIPlot:
         "segments",
         "tr",
         "confounds",
+        "physio",
+        "physio_confounds",
         "spikes",
         "nskip",
         "sort_carpet",
@@ -52,6 +54,10 @@ class fMRIPlot:
         segments,
         confounds=None,
         conf_file=None,
+        physio=None,
+        physio_file=None,
+        physio_confounds=None,
+        physio_conf_file=None,
         tr=None,
         usecols=None,
         units=None,
@@ -84,6 +90,31 @@ class fMRIPlot:
                     "cutoff": vlines.get(name),
                 }
 
+        self.physio={}
+        if physio is None:
+            # extend functionality to read in physio files here?
+            pass
+
+        if physio is not None:
+            # handle similarly to confounds file
+            for name in physio.columns:
+                self.physio[name] = {
+                    "values": physio[[name]].values.squeeze().tolist(),
+                    "units": units.get(name),
+                }
+
+        self.physio_confounds={}
+        if physio_confounds is None:
+            # extend functionality to read in physio derivative files here?
+            pass
+        if physio_confounds is not None:
+            # handle similarly to confounds file
+            for name in physio_confounds.columns:
+                self.physio_confounds[name] = {
+                    "values": physio_confounds[[name]].values.squeeze().tolist(),
+                    "units": units.get(name),
+                }
+
         self.spikes = []
         if spikes_files:
             for sp_file in spikes_files:
@@ -101,7 +132,9 @@ class fMRIPlot:
 
         nconfounds = len(self.confounds)
         nspikes = len(self.spikes)
-        nrows = 1 + nconfounds + nspikes
+        nphysio = len(self.physio)
+        nphysio_confounds = len(self.physio_confounds)
+        nrows = 1 + nconfounds + nspikes + nphysio + nphysio_confounds
 
         # Create grid
         grid = GridSpec(nrows, 1, wspace=0.0, hspace=0.05, height_ratios=[1] * (nrows - 1) + [5])
@@ -111,14 +144,27 @@ class fMRIPlot:
             spikesplot(tsz, title=name, outer_gs=grid[grid_id], tr=self.tr, zscored=iszs)
             grid_id += 1
 
-        if self.confounds:
+        if self.confounds or self.physio or self.physio_confounds:
             from seaborn import color_palette
 
-            palette = color_palette("husl", nconfounds)
+            palette = color_palette("husl", nconfounds+nphysio+nphysio_confounds)
 
         for i, (name, kwargs) in enumerate(self.confounds.items()):
             tseries = kwargs.pop("values")
             confoundplot(tseries, grid[grid_id], tr=self.tr, color=palette[i], name=name, **kwargs)
+            grid_id += 1
+
+        # plot physio if present
+        for i, (name, kwargs) in enumerate(self.physio.items()):
+            tseries = kwargs.pop("values")
+            # note that here entire series is plotted, regardless of sampling rate or length
+            confoundplot(tseries, grid[grid_id], tr=None, color=palette[nconfounds+i], name=name, **kwargs)
+            grid_id += 1
+
+        # likewise with any physio confounds
+        for i, (name, kwargs) in enumerate(self.physio_confounds.items()):
+            tseries = kwargs.pop("values")
+            confoundplot(tseries, grid[grid_id], tr=self.tr, color=palette[nconfounds+nphysio+i], name=name, **kwargs)
             grid_id += 1
 
         plot_carpet(
